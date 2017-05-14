@@ -1,4 +1,4 @@
-# A .NET Standard 1.4 SDK for the Microsoft Cognitive Services APIs.
+# A .NET Standard 1.4 library for the Microsoft Cognitive Services APIs.
 
 As of now, it supports [OCR](https://westus.dev.cognitive.microsoft.com/docs/services/56f91f2d778daf23d8ec6739/operations/56f91f2e778daf14a499e1fc) processing of the [Computer Vision API v1.0](https://docs.microsoft.com/en-us/azure/cognitive-services/computer-vision/home).
 
