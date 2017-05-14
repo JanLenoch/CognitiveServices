@@ -9,7 +9,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\JanLenoch.CognitiveServices.Http\JanLenoch.CognitiveServices.Http.csproj" />
     <ProjectReference Include="..\JanLenoch.CognitiveServices.Utils\JanLenoch.CognitiveServices.Utils.csproj" />
   </ItemGroup>
 

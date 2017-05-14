@@ -1,5 +1,5 @@
-﻿using JanLenoch.CognitiveServices.Common;
-using SkiaSharp;
+﻿using JanLenoch.CognitiveServices.Http;
+using JanLenoch.CognitiveServices.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,118 +11,104 @@ using System.Threading.Tasks;
 
 namespace JanLenoch.CognitiveServices.Ocr
 {
-    public class OcrClient : Client
+    public partial class OcrClient : Client
     {
-        public enum SupportedLanguages
-        {
-            NotSet,
-            AutoDetect,
-            ChineseSimplified,
-            ChineseTraditional,
-            Czech,
-            Danish,
-            Dutch,
-            English,
-            Finnish,
-            French,
-            German,
-            Greek,
-            Hungarian,
-            Italian,
-            Japanese,
-            Korean,
-            Norwegian,
-            Polish,
-            Portuguese,
-            Russian,
-            Spanish,
-            Swedish,
-            Turkish
-        }
+        public const string SUBSCRIPTION_KEY_NAME = "Ocp-Apim-Subscription-Key";
+        protected const string URI_STUB = "api.cognitive.microsoft.com/vision/v1.0/ocr";
 
-        public enum SupportedImageFormats
-        {
-            NotSet,
-            Jpeg,
-            Png,
-            Gif,
-            Bmp
-        }
+        protected readonly OcrRegions _region;
+        protected readonly string _subscriptionKey;
 
-        private const string OCR_URI = @"https://westus.api.cognitive.microsoft.com/vision/v1.0/ocr";
+        #region "Constructors"
 
-        private readonly string _subscriptionKey;
-
-        public OcrClient(string subscriptionKey)
+        public OcrClient(string subscriptionKey, OcrRegions region)
         {
             _subscriptionKey = subscriptionKey;
+
+            if (region != OcrRegions.NotSet)
+            {
+                _region = region;
+            }
+            else
+            {
+                throw GetRegionException();
+            }
         }
 
+        #endregion
 
-        public async Task<Response> Submit(Uri imageUri, SupportedImageFormats imageFormat = SupportedImageFormats.NotSet, SupportedLanguages language = SupportedLanguages.NotSet, bool? detectOrientation = null)
+        #region "Public methods"
+
+        /// <summary>
+        /// Recognizes text in an image that's available via a public URI.
+        /// </summary>
+        /// <param name="imageUri">A <see cref="Uri"/> of the image</param>
+        /// <param name="imageFormat">A <see cref="OcrImageFormats"/> format</param>
+        /// <param name="language">A <see cref="OcrLanguages"/> language</param>
+        /// <param name="detectOrientation">Explicitly requests to detect image orientation</param>
+        /// <returns>The <see cref="OcrResponse"/> with the structured text</returns>
+        public async Task<OcrResponse> RecognizeAsync(Uri imageUri, OcrImageFormats imageFormat = OcrImageFormats.NotSet, OcrLanguages language = OcrLanguages.NotSet, bool? detectOrientation = null)
         {
             PrepareQueryString(language, detectOrientation);
 
-            throw new NotImplementedException();
+            var urlContent = new UrlContent
+            {
+                Url = imageUri.AbsoluteUri
+            };
+
+            using (var content = new StringContent(await Json.SerializeAsync(urlContent)))
+            {
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+
+                return await GetResponse(content);
+            }
         }
 
-
-        public async Task<Response> Submit(byte[] imageBytes, SupportedLanguages language = SupportedLanguages.NotSet, bool? detectOrientation = null)
+        /// <summary>
+        /// Recognizes text in a <see cref="byte[]"/> array of an image.
+        /// </summary>
+        /// <param name="imageBytes">A <see cref="byte[]"/> of an image</param>
+        /// <param name="language">A <see cref="OcrLanguages"/> language</param>
+        /// <param name="detectOrientation">Explicitly requests to detect image orientation</param>
+        /// <returns>The <see cref="OcrResponse"/> with the structured text</returns>
+        public async Task<OcrResponse> RecognizeAsync(byte[] imageBytes, OcrLanguages language = OcrLanguages.NotSet, bool? detectOrientation = null)
         {
             PrepareQueryString(language, detectOrientation);
-            string contentType;
-
-            using (SKData skData = SKData.CreateCopy(imageBytes))
-            {
-                using (SKCodec codec = SKCodec.Create(skData))
-                {
-
-                    switch (codec.EncodedFormat)
-                    {
-                        case SKEncodedImageFormat.Jpeg:
-                            contentType = "image/jpeg";
-                            break;
-                        case SKEncodedImageFormat.Png:
-                            contentType = "image/png";
-                            break;
-                        case SKEncodedImageFormat.Gif:
-                            contentType = "image/gif";
-                            break;
-                        case SKEncodedImageFormat.Bmp:
-                            contentType = "image/bmp";
-                            break;
-                        default:
-                            contentType = string.Empty;
-                            break;
-                    }
-                }
-            }
-
-            if (contentType == string.Empty)
-            {
-                throw new FormatException("The format of the image is not supported.");
-            }
-
-            AddContentTypeHeader(contentType);
 
             using (var content = new ByteArrayContent(imageBytes))
             {
-                // TODO 'application/octet-stream' or 'multipart/form-data' ?
-                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-                return await GetResponse<Response>(OCR_URI, content);
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+                return await GetResponse(content);
             }
         }
 
-        private void PrepareQueryString(SupportedLanguages language, bool? detectOrientation)
+        /// <summary>
+        /// Gets the <see cref="Uri"/> of a select <see cref="OcrRegions"/> region.
+        /// </summary>
+        /// <param name="region">A <see cref="OcrRegions"/> region</param>
+        /// <returns>The base <see cref="Uri"/> of the region</returns>
+        public Uri GetRegionalUri(OcrRegions region)
         {
-            if (!string.IsNullOrEmpty(_subscriptionKey))
+            if (region != OcrRegions.NotSet)
             {
-                QueryStringValues.Add("Ocp-Apim-Subscription-Key", _subscriptionKey);
+                return new Uri($"https://{region.ToString().ToLower()}.{URI_STUB}");
             }
-
-            if (language != OcrClient.SupportedLanguages.NotSet)
+            else
             {
-                QueryStringValues.Add("language", Globalization.Languages.First((KeyValuePair<string, string> l) => l.Value == language.ToString()).Key);
+                throw GetRegionException();
+            }
+        }
+
+        #endregion
+
+        #region "Protected methods"
+
+        protected virtual void PrepareQueryString(OcrLanguages language, bool? detectOrientation = null)
+        {
+            if (language != OcrLanguages.NotSet)
+            {
+                QueryStringValues.Add("language", Globalization.Languages.FirstOrDefault((KeyValuePair<string, string> l) => l.Value == language.ToString()).Key);
             }
 
             if (detectOrientation.HasValue)
@@ -130,5 +116,81 @@ namespace JanLenoch.CognitiveServices.Ocr
                 QueryStringValues.Add("detectOrientation", detectOrientation.Value.ToString());
             }
         }
+
+        protected virtual async Task<OcrResponse> GetResponse(HttpContent content)
+        {
+            string url = GetRegionalUri(_region).ToString();
+            var response = await Post<OcrResponse>(url, content, SUBSCRIPTION_KEY_NAME, _subscriptionKey);
+            ErrorCode errorCode;
+
+            if (response.IsSuccessStatusCode)
+            {
+                return response;
+            }
+            else
+            {
+                Enum.TryParse<ErrorCode>(response.ErrorCode, out errorCode);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    switch (errorCode)
+                    {
+                        case ErrorCode.InvalidImageUrl:
+                            throw new Exception(GetExceptionMessage("Image URL is badly formatted or not accessible.", response.ErrorMessage));
+                        case ErrorCode.InvalidImageFormat:
+                            throw new FormatException(GetExceptionMessage("Input data is not a valid image.", response.ErrorMessage));
+                        case ErrorCode.InvalidImageSize:
+                            throw new Exception(GetExceptionMessage("Input image is too large.", response.ErrorMessage));
+                        case ErrorCode.NotSupportedLanguage:
+                            throw new Exception(GetExceptionMessage("Specified language is not supported.", response.ErrorMessage));
+                        default:
+                            throw GetUnknownErrorException();
+                    }
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.UnsupportedMediaType)
+                {
+                    throw new Exception(GetExceptionMessage("The Content-Type request header is not valid.", response.ErrorMessage));
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.InternalServerError)
+                {
+                    switch (errorCode)
+                    {
+                        case ErrorCode.FailedToProcess:
+                            throw new Exception(GetExceptionMessage("Failed to process the image.", response.ErrorMessage));
+                        case ErrorCode.Timeout:
+                            throw new Exception(GetExceptionMessage("Image processing time out.", response.ErrorCode));
+                        case ErrorCode.InternalServerError:
+                            throw new Exception(GetExceptionMessage("Internal server error.", response.ErrorMessage));
+                        default:
+                            throw GetUnknownErrorException();
+                    }
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    throw new Exception(GetExceptionMessage("Unauthorized.", response.ErrorMessage));
+                }
+                else
+                {
+                    throw GetUnknownErrorException();
+                }
+            }
+        }
+
+        protected static string GetExceptionMessage(string mainMessage, params string[] originalMessages)
+        {
+            return $"{mainMessage}\r\nOriginal messages:\r\n{string.Join("\r\n", originalMessages)}";
+        }
+
+        protected static ArgumentOutOfRangeException GetRegionException()
+        {
+            return new ArgumentOutOfRangeException(nameof(OcrRegions.NotSet), OcrRegions.NotSet, "The region must be set to return its URI.");
+        }
+
+        protected static Exception GetUnknownErrorException()
+        {
+            return new Exception("An unknown error occured.");
+        }
+        
+        #endregion
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace JanLenoch.CognitiveServices.Common
+﻿namespace JanLenoch.CognitiveServices.Http
 {
     public enum Endpoint
     {
